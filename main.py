@@ -28,7 +28,7 @@ conn = cx_Oracle.connect('hr/hr2020@ORCLPDB')
 cursor = conn.cursor()
 logger = logging.getLogger(__name__)
 
-lesson_time = {1: '9:00-10:30',
+lesson_time = {1: '09:00-10:30',
                2: '10:40-12:10',
                3: '12:40-14:10',
                4: '14:20-15:50',
@@ -273,6 +273,7 @@ async def time_sleep_notifications(time_sleep, message: Message, state: FSMConte
                                 f'<u><b>{row[1]} пара - {lesson_time[row[1]]}</b></u>:\n'
                                 f'<b>Предмет:</b> {row[2]}\n<b>Препод.:</b> {row[4]}\n'
                                 f'<b>Формат: </b>{row[3]}\n<b>Аудитория:</b> {row[5]}')
+                        text_lesson = None
 
             #Если пользователя преподаватель
             else:
