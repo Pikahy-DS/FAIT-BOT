@@ -284,9 +284,7 @@ async def time_sleep_notifications(time_sleep, message: Message, state: FSMConte
                 #Проверяем есть ли в БД группа пользователя
                 group_name_users = """SELECT group_name from users where id_user =: id_user"""
                 text_lesson = None
-                await message.answer(f'Уведомления за {time_sleep} минут успешно подключены')
-                await state.clear()
-                count = 0
+
                 # Делаем пока пользователь хочет получать уведомления
                 records = cursor.execute(group_name_users, [message.from_user.id]).fetchall()
                 group_name = records[0][0]
@@ -359,7 +357,7 @@ async def time_sleep_notifications(time_sleep, message: Message, state: FSMConte
                 #Проверка работоспособности
                 print(f"Итерация - {count} ---- {text_lesson} --- {time_sleep}")
             count = count + 1
-            await asyncio.sleep(10)
+            await asyncio.sleep(60)
     except:
         await state.clear()
         await message.answer('Вы не правильно ввели количество минут, попробуйте еще раз')
