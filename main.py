@@ -12,6 +12,9 @@ from aiogram.dispatcher.fsm.context import FSMContext
 from aiogram.dispatcher.fsm.storage.memory import MemoryStorage
 import datetime
 import time
+from threading import Thread
+import pyowm
+from pyowm.utils.config import get_default_config
 
 form_router = Router()
 
@@ -27,6 +30,7 @@ dp = Dispatcher(storage=MemoryStorage())
 conn = cx_Oracle.connect('hr/hr2020@ORCLPDB')
 cursor = conn.cursor()
 logger = logging.getLogger(__name__)
+owm = pyowm.OWM(config.TOKEN_OWM)
 
 lesson_time = {1: '09:00-10:30',
                2: '10:40-12:10',
@@ -42,6 +46,13 @@ builder_main = [[KeyboardButton(text='Расписание'),
                  KeyboardButton(text = 'Уведомления')],
                 [KeyboardButton(text='/delete')]]
 markup_main = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=builder_main)
+builder_main_admin = [[KeyboardButton(text='Расписание'),
+                 KeyboardButton(text='Новости'),
+                 KeyboardButton(text = 'Уведомления')],
+                [KeyboardButton(text='/delete'),
+                 KeyboardButton(text = '🌦 Запуск погоды'),
+                 KeyboardButton(text = '🛎 Запуск уведомлений')]]
+markup_main_admin = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=builder_main_admin)
 
 
 async def insert_varible_into_table_group(id_user, group_name, message: Message):
@@ -227,6 +238,90 @@ async def news_all(id_user):
     # keyboard1 = InlineKeyboardMarkup(inline_keyboard=builder_i)
     # await message.answer("Как подавать котлеты?", reply_markup=keyboard1)
 
+async def weather(message: Message):
+    flag_time_sleep = True
+    await message.answer('Функция погода - запущена')
+    bot = Bot(TOKEN, parse_mode="html")
+    while flag_time_sleep:
+        date1 = datetime.datetime.now().strftime('%H:%M')
+        if date1[0:2] == '08' and date1[3:5] == '00':
+            weeknum = datetime.datetime.now().isocalendar().week % 2
+            daynum = datetime.datetime.now().isocalendar().weekday
+            select_weather_schedule_sql = """SELECT id_user from users"""
+            select_weather_schedule = cursor.execute(select_weather_schedule_sql, ).fetchall()
+            for i in select_weather_schedule:
+                print(i[0])
+                group_name_users = """SELECT group_name from users where id_user =: id_user"""
+                records = cursor.execute(group_name_users, [i[0]]).fetchall()
+                if records[0][0] != None:
+                    group_name = records[0][0]
+                    sql = """SELECT * FROM schedule WHERE lower(group_name) = lower(:group_name) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
+                    num = cursor.execute(sql,
+                                         {'group_name': group_name, 'daynum': daynum, 'weeknum': weeknum}).fetchall()
+                    print(records[0][0], daynum, weeknum)
+                    if num:
+                        for row in num:
+                            print(row)
+                            await bot.send_message(i[0],
+                                                   f'Доброе утро! Ваши пары на сегодня:\n'
+                                                   f'<u><b>{row[1]} пара - {lesson_time[row[1]]}</b></u>:\n'
+                                                   f'<b>Предмет:</b> {row[2]}\n<b>Препод.:</b> {row[4]}\n'
+                                                   f'<b>Формат: </b>{row[3]}\n<b>Аудитория:</b> {row[5]}')
+                            # bot.send_message(message.chat.id, f"http://r.sf-misis.ru/group/{num[0][0]}")
+                    else:
+                        await bot.send_message(i[0], f'У вас сегодня нет пар!')
+                else:
+                    group_name_users = """SELECT lower(FIO) from users where id_user =: id_user"""
+                    records = cursor.execute(group_name_users, [i[0]]).fetchall()
+                    teachers = records[0][0]
+                    sql = """SELECT * FROM schedule WHERE lower(teacher) = lower(:teachers) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
+                    num = cursor.execute(sql, {'teachers': teachers, 'daynum': daynum, 'weeknum': weeknum}).fetchall()
+                    print(records[0][0], daynum, weeknum)
+                    d = {}
+                    for row in num:
+                        key = f"{row[1]} {row[2]}"
+                        if key in d:
+                            d[key].append(row[0])
+                        else:
+                            d[key] = [row[0]]
+
+                    if num:
+                        for row in num:
+                            key = f"{row[1]} {row[2]}"
+                            if not d[key]:
+                                continue
+                            await bot.send_message(i[0],
+                                                   f'Доброе утро! Ваши пары на сегодня:\n'
+                                                   f'<u><b>{row[1]} пара - {lesson_time[row[1]]}:</b></u>\n'
+                                                   f'<b>Предмет:</b> {row[2]}\n<b>Группа(ы):</b> {", ".join(d[key])}\n'
+                                                   f'<b>Формат:</b> {row[3]}\n<b>Аудитория:</b> {row[5]}')
+                            print(
+                                f'{row[1]} пара - {lesson_time[row[1]]}:\n{row[2]}\n{", ".join(d[key])}\n{row[3]}\n{row[5]}')
+                            d[key] = []
+
+                        # bot.send_message(message.chat.id, f"http://r.sf-misis.ru/teacher/{num[0][0]}")
+                    else:
+                        await bot.send_message(i[0],f'У вас сегодня нет пар!')
+                try:
+                    config_dict = get_default_config()
+                    config_dict['language'] = 'RU'
+                    mgr = owm.weather_manager()
+                    observation = mgr.weather_at_place('Старый Оскол')
+                    w = observation.weather
+                    temp = w.temperature('celsius')['temp']
+                    V = w.wind()
+                    clothes = '🥶 Одевайся теплее' if (temp < 20 or V['speed'] > 10) else '🥵 Надевай легкую одежду'
+                    await bot.send_message(i[0],
+                                           'На улице сейчас ' + str(
+                                               w.detailed_status) + '\n🌡Температура сейчас в районе ' + str(
+                                               int(temp)) + ' °C\n' + '🌬Скорость ветра = ' + str(
+                                               V['speed']) + ' м/с\n' + clothes)
+                except Exception:
+                    await bot.send_message(i[0],
+                                           'Ошибка на сервер, нет связи с сервером погоды!')
+
+        await asyncio.sleep(60)
+
 async def delete_time_sleep_notifications(message: Message):
     str_select_time_sleep = None
     select_time_sleep_sql = """SELECT notifications from users where id_user =: id_user"""
@@ -238,11 +333,112 @@ async def delete_time_sleep_notifications(message: Message):
     conn.commit()
     print('Успешно удалены', '====', str_select_time_sleep)
 
+async def time_sleep_notifications(message: Message):
+    flag_time_sleep = True
+    bot = Bot(TOKEN, parse_mode="html")
+    await message.answer('Функция уведомления - запущена!')
+    # Делаем пока пользователь хочет получать уведомления
+    while flag_time_sleep == True:
+        select_time_sleep_sql = """SELECT id_user,group_name,FIO,notifications from users"""
+        select_time_sleep = cursor.execute(select_time_sleep_sql, ).fetchall()
+        print(select_time_sleep)
+        for j in range(0, len(select_time_sleep)):
+            str_select_time_sleep = select_time_sleep[j][3]
+            if str_select_time_sleep is None:
+                continue
+            for time_sleep_one in str_select_time_sleep.split(','):
+                print(time_sleep_one)
+                # Узнаем текущее время, дату и неделю
+                date1 = datetime.datetime.now().strftime('%H:%M')
+                weeknum = datetime.datetime.now().isocalendar().week % 2
+                daynum = datetime.datetime.now().isocalendar().weekday
 
-async def time_sleep_notifications(time_sleep, message: Message, state: FSMContext):
+                text_lesson = None
+
+                group_name = select_time_sleep[j][1]
+                # Если пользователь студент
+
+                #Если пользователь студент
+
+                if group_name is not None:
+                    print(group_name)
+                    sql = """SELECT number_lesson FROM schedule WHERE lower(group_name) = lower(:group_name) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
+                    num = cursor.execute(sql,
+                                         {'group_name': group_name, 'daynum': daynum, 'weeknum': weeknum}).fetchall()
+                    for i in num:
+                        # print(i[0])
+                        number_l = i[0]
+                        date_delta = (int(lesson_time[number_l][0:2]) * 60 + int(lesson_time[number_l][3:5])) - (
+                                int(date1[0:2]) * 60 + int(date1[3:5]))
+                        text_lesson = [f'У вас через {time_sleep_one} минут начнется:' if date_delta == int(
+                            time_sleep_one) else 'None'][0]
+
+                        # Если пора присылать уведомление
+                        if text_lesson != 'None':
+                            lesson_sql = """SELECT * from schedule where lower(group_name) = lower(:group_name) AND day_number = :daynum and week = :weeknum and number_lesson = :number_lesson"""
+                            lesson = cursor.execute(lesson_sql,
+                                                    {'group_name': group_name, 'daynum': daynum, 'weeknum': weeknum,
+                                                     'number_lesson': number_l}).fetchall()
+                            for row in lesson:
+                                # print(row)
+                                await bot.send_message(select_time_sleep[j][0],
+                                              f'{text_lesson}\n'
+                                              f'<u><b>{row[1]} пара - {lesson_time[row[1]]}</b></u>:\n'
+                                              f'<b>Предмет:</b> {row[2]}\n<b>Препод.:</b> {row[4]}\n'
+                                              f'<b>Формат: </b>{row[3]}\n<b>Аудитория:</b> {row[5]}')
+                            text_lesson = None
+
+                # Если пользователя преподаватель
+                else:
+                    teachers = select_time_sleep[j][2]
+                    print(teachers)
+                    sql = """SELECT DISTINCT (number_lesson) FROM schedule WHERE lower(teacher) = lower(:teachers) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
+                    num = cursor.execute(sql, {'teachers': teachers, 'daynum': daynum, 'weeknum': weeknum}).fetchall()
+                    print(num)
+                    d = {}
+                    for i in num:
+                        # print(i[0])
+                        number_l = i[0]
+                        date_delta = (int(lesson_time[number_l][0:2]) * 60 + int(lesson_time[number_l][3:5])) - (
+                                int(date1[0:2]) * 60 + int(date1[3:5]))
+                        text_lesson = [f'У вас через {time_sleep_one} минут начнется:' if date_delta == int(
+                            time_sleep_one) else 'None'][0]
+
+                        # Если пора присылать уведомление
+                        if text_lesson != 'None':
+                            lesson_sql = """SELECT * FROM schedule WHERE lower(teacher) = lower(:teachers) AND day_number = :daynum and week = :weeknum and number_lesson = :number_lesson ORDER BY number_lesson"""
+                            lesson = cursor.execute(lesson_sql,
+                                                    {'teachers': teachers, 'daynum': daynum, 'weeknum': weeknum,
+                                                     'number_lesson': number_l}).fetchall()
+                            for row in lesson:
+                                key = f"{row[1]} {row[2]}"
+                                if key in d:
+                                    d[key].append(row[0])
+                                else:
+                                    d[key] = [row[0]]
+
+                            if lesson:
+                                for row in lesson:
+                                    key = f"{row[1]} {row[2]}"
+                                    if not d[key]:
+                                        continue
+                                    await bot.send_message(select_time_sleep[j][0],
+                                                  f'{text_lesson}\n'
+                                                  f'<u><b>{row[1]} пара - {lesson_time[row[1]]}:</b></u>\n'
+                                                  f'<b>Предмет:</b> {row[2]}\n<b>Группа(ы):</b> {", ".join(d[key])}\n'
+                                                  f'<b>Формат:</b> {row[3]}\n<b>Аудитория:</b> {row[5]}')
+                                    # print(
+                                    #    f'{row[1]} пара - {lesson_time[row[1]]}:\n{row[2]}\n{", ".join(d[key])}\n{row[3]}\n{row[5]}')
+                                    d[key] = []
+                    text_lesson = None
+                # Проверка работоспособности
+                print(f"Итерация - {select_time_sleep[j][0]} ---- {text_lesson} --- {time_sleep_one}")
+        await asyncio.sleep(60)
+
+async def time_sleep_notifications_add(time_sleep, message: Message, state: FSMContext):
     # Сделать запросы раз в сутки, путем добавления все в переменные, для оптимизации
     try:
-        flag_time_sleep = True
+
         test_time_sleep = int(time_sleep)
         str_select_time_sleep = time_sleep
 
@@ -265,99 +461,7 @@ async def time_sleep_notifications(time_sleep, message: Message, state: FSMConte
 
         await message.answer(f'Уведомления за {time_sleep} минут успешно подключены')
         await state.clear()
-        count = 0
-        # Делаем пока пользователь хочет получать уведомления
-        while flag_time_sleep == True:
-            select_time_sleep_sql = """SELECT notifications from users where id_user =: id_user"""
-            select_time_sleep = cursor.execute(select_time_sleep_sql, [message.from_user.id]).fetchall()
-            print(select_time_sleep)
-            if select_time_sleep[0][0] is None:
-                flag_time_sleep = False
-                continue
-            for time_sleep_one in str_select_time_sleep.split(','):
-                print(time_sleep_one)
-                #Узнаем текущее время, дату и неделю
-                date1 = datetime.datetime.now().strftime('%H:%M')
-                weeknum = datetime.datetime.now().isocalendar().week % 2
-                daynum = datetime.datetime.now().isocalendar().weekday
 
-                #Проверяем есть ли в БД группа пользователя
-                group_name_users = """SELECT group_name from users where id_user =: id_user"""
-                text_lesson = None
-
-                # Делаем пока пользователь хочет получать уведомления
-                records = cursor.execute(group_name_users, [message.from_user.id]).fetchall()
-                group_name = records[0][0]
-                #Если пользователь студент
-                if group_name is not None:
-                    print(group_name)
-                    sql = """SELECT number_lesson FROM schedule WHERE lower(group_name) = lower(:group_name) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
-                    num = cursor.execute(sql, {'group_name': group_name, 'daynum': daynum, 'weeknum': weeknum}).fetchall()
-                    for i in num:
-                        #print(i[0])
-                        number_l = i[0]
-                        date_delta = (int(lesson_time[number_l][0:2]) * 60 + int(lesson_time[number_l][3:5])) - (int(date1[0:2]) * 60 + int(date1[3:5]))
-                        text_lesson = [f'У вас через {time_sleep_one} минут начнется:' if date_delta == int(time_sleep_one) else 'None'][0]
-
-                        #Если пора присылать уведомление
-                        if text_lesson != 'None':
-                            lesson_sql = """SELECT * from schedule where lower(group_name) = lower(:group_name) AND day_number = :daynum and week = :weeknum and number_lesson = :number_lesson"""
-                            lesson = cursor.execute(lesson_sql, {'group_name': group_name, 'daynum': daynum, 'weeknum': weeknum, 'number_lesson': number_l}).fetchall()
-                            for row in lesson:
-                                #print(row)
-                                await message.answer(
-                                    f'{text_lesson}\n'
-                                    f'<u><b>{row[1]} пара - {lesson_time[row[1]]}</b></u>:\n'
-                                    f'<b>Предмет:</b> {row[2]}\n<b>Препод.:</b> {row[4]}\n'
-                                    f'<b>Формат: </b>{row[3]}\n<b>Аудитория:</b> {row[5]}')
-                            text_lesson = None
-
-                #Если пользователя преподаватель
-                else:
-                    group_name_users = """SELECT lower(FIO) from users where id_user =: id_user"""
-                    records = cursor.execute(group_name_users, [message.from_user.id]).fetchall()
-                    teachers = records[0][0]
-                    print(teachers)
-                    sql = """SELECT DISTINCT (number_lesson) FROM schedule WHERE lower(teacher) = lower(:teachers) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
-                    num = cursor.execute(sql, {'teachers': teachers, 'daynum': daynum, 'weeknum': weeknum}).fetchall()
-                    print(num)
-                    d = {}
-                    for i in num:
-                        #print(i[0])
-                        number_l = i[0]
-                        date_delta = (int(lesson_time[number_l][0:2]) * 60 + int(lesson_time[number_l][3:5])) - (int(date1[0:2]) * 60 + int(date1[3:5]))
-                        text_lesson = [f'У вас через {time_sleep_one} минут начнется:' if date_delta == int(time_sleep_one) else 'None'][0]
-
-                        #Если пора присылать уведомление
-                        if text_lesson != 'None':
-                            lesson_sql = """SELECT * FROM schedule WHERE lower(teacher) = lower(:teachers) AND day_number = :daynum and week = :weeknum and number_lesson = :number_lesson ORDER BY number_lesson"""
-                            lesson = cursor.execute(lesson_sql,{'teachers': teachers, 'daynum': daynum, 'weeknum': weeknum, 'number_lesson': number_l}).fetchall()
-                            for row in lesson:
-                                key = f"{row[1]} {row[2]}"
-                                if key in d:
-                                    d[key].append(row[0])
-                                else:
-                                    d[key] = [row[0]]
-
-                            if lesson:
-                                for row in lesson:
-                                    key = f"{row[1]} {row[2]}"
-                                    if not d[key]:
-                                        continue
-                                    await message.answer(
-                                        f'{text_lesson}\n'
-                                        f'<u><b>{row[1]} пара - {lesson_time[row[1]]}:</b></u>\n'
-                                        f'<b>Предмет:</b> {row[2]}\n<b>Группа(ы):</b> {", ".join(d[key])}\n'
-                                        f'<b>Формат:</b> {row[3]}\n<b>Аудитория:</b> {row[5]}')
-                                    #print(
-                                    #    f'{row[1]} пара - {lesson_time[row[1]]}:\n{row[2]}\n{", ".join(d[key])}\n{row[3]}\n{row[5]}')
-                                    d[key] = []
-                    text_lesson = None
-
-                #Проверка работоспособности
-                print(f"Итерация - {count} ---- {text_lesson} --- {time_sleep}")
-            count = count + 1
-            await asyncio.sleep(60)
     except:
         await state.clear()
         await message.answer('Вы не правильно ввели количество минут, попробуйте еще раз')
@@ -428,7 +532,7 @@ async def process_name(message: Message, state: FSMContext) -> None:
 @form_router.message(Form.time_sleep_notifications)
 async def process_time_sleep_notifications(message: Message, state: FSMContext) -> None:
     time_state = await state.update_data(time_sleep_notifications=message.text)
-    await time_sleep_notifications(time_state['time_sleep_notifications'], message, state)
+    await time_sleep_notifications_add(time_state['time_sleep_notifications'], message, state)
     await state.clear()
 
 # Обработка инлайн кнопок
@@ -568,9 +672,14 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     records = cursor.execute(group_name_users, [message.from_user.id]).fetchall()
     print(records)
     if records:
-        await message.answer(
-            "Привет, {0.first_name}!\nЯ - <b>Помошник</b>, бот созданный, чтобы упростить просмотр расписания ".format(
-                message.from_user), reply_markup=markup_main)
+        if message.from_user.id == 1005179687:
+            await message.answer(
+                "Привет, {0.first_name}!\nВы находитесь в кабинете администратора. ".format(
+                    message.from_user), reply_markup=markup_main_admin)
+        else:
+            await message.answer(
+                "Привет, {0.first_name}!\nЯ - <b>Помошник</b>, бот созданный, чтобы упростить просмотр расписания ".format(
+                    message.from_user), reply_markup=markup_main)
     else:
         builder_teacher_group = [[KeyboardButton(text='Студент'), KeyboardButton(text='Преподаватель')]]
         teacher_group = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=builder_teacher_group)
@@ -624,9 +733,14 @@ async def text_button(message: Message, state: FSMContext) -> Any:
         time_lesson_markup = InlineKeyboardMarkup(inline_keyboard=builder_time_lesson)
         await message.answer('За сколько вы хотите получать уведомления о предстоящих парах?\nВведите время в минутах: ', reply_markup=time_lesson_markup)
     elif message.text == 'test':
-        await sleep_test()
+        await time_sleep_notifications(message)
+    elif message.text == '🌦 Запуск погоды':
+        await weather(message)
+    elif message.text == '🛎 Запуск уведомлений':
+        await time_sleep_notifications(message)
     else:
         print('Бывает')
+
 
 
 def main() -> None:
@@ -634,6 +748,7 @@ def main() -> None:
     bot = Bot(TOKEN, parse_mode="html")
     # And the run events dispatching
     dp.run_polling(bot)
+
 
 
 if __name__ == "__main__":
