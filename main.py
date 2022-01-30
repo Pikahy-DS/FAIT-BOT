@@ -265,8 +265,15 @@ async def time_sleep_notifications(message: Message):
 
                 text_lesson = None
 
+<<<<<<< HEAD
                 group_name = select_time_sleep[j][1]
                 # Если пользователь студент
+=======
+                # Делаем пока пользователь хочет получать уведомления
+                records = cursor.execute(group_name_users, [message.from_user.id]).fetchall()
+                group_name = records[0][0]
+                #Если пользователь студент
+>>>>>>> dev
                 if group_name is not None:
                     print(group_name)
                     sql = """SELECT number_lesson FROM schedule WHERE lower(group_name) = lower(:group_name) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
@@ -339,6 +346,7 @@ async def time_sleep_notifications(message: Message):
                                     d[key] = []
                     text_lesson = None
 
+<<<<<<< HEAD
                 # Проверка работоспособности
                 print(f"Итерация - {select_time_sleep[j][0]} ---- {text_lesson} --- {time_sleep_one}")
         await asyncio.sleep(60)
@@ -370,6 +378,12 @@ async def time_sleep_notifications_add(time_sleep, message: Message, state: FSMC
         await message.answer(f'Уведомления за {time_sleep} минут успешно подключены')
         await state.clear()
 
+=======
+                #Проверка работоспособности
+                print(f"Итерация - {count} ---- {text_lesson} --- {time_sleep}")
+            count = count + 1
+            await asyncio.sleep(60)
+>>>>>>> dev
     except:
         await state.clear()
         await message.answer('Вы не правильно ввели количество минут, попробуйте еще раз')
