@@ -246,7 +246,7 @@ async def delete_time_sleep_notifications(message: Message):
 
 async def time_sleep_notifications(message: Message):
     flag_time_sleep = True
-    print('Функция уведомления - запущена!')
+    await message.answer('Функция уведомления - запущена!')
     # Делаем пока пользователь хочет получать уведомления
     while flag_time_sleep == True:
         select_time_sleep_sql = """SELECT id_user,group_name,FIO,notifications from users"""
@@ -267,6 +267,9 @@ async def time_sleep_notifications(message: Message):
 
                 group_name = select_time_sleep[j][1]
                 # Если пользователь студент
+
+                #Если пользователь студент
+
                 if group_name is not None:
                     print(group_name)
                     sql = """SELECT number_lesson FROM schedule WHERE lower(group_name) = lower(:group_name) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
@@ -338,7 +341,6 @@ async def time_sleep_notifications(message: Message):
                                     #    f'{row[1]} пара - {lesson_time[row[1]]}:\n{row[2]}\n{", ".join(d[key])}\n{row[3]}\n{row[5]}')
                                     d[key] = []
                     text_lesson = None
-
                 # Проверка работоспособности
                 print(f"Итерация - {select_time_sleep[j][0]} ---- {text_lesson} --- {time_sleep_one}")
         await asyncio.sleep(60)
