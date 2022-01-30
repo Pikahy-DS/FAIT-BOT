@@ -15,9 +15,9 @@ import time
 from threading import Thread
 import pyowm
 from pyowm.utils.config import get_default_config
+from vk_api import VkApi
 
 form_router = Router()
-
 
 class Form(StatesGroup):
     type_group_teacher = State()
@@ -44,15 +44,213 @@ lesson_time = {1: '09:00-10:30',
 builder_main = [[KeyboardButton(text='Расписание'),
                  KeyboardButton(text='Новости'),
                  KeyboardButton(text = 'Уведомления')],
-                [KeyboardButton(text='/delete')]]
+                [KeyboardButton(text='Профиль')]]
 markup_main = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=builder_main)
 builder_main_admin = [[KeyboardButton(text='Расписание'),
                  KeyboardButton(text='Новости'),
                  KeyboardButton(text = 'Уведомления')],
-                [KeyboardButton(text='/delete'),
+                [KeyboardButton(text='Профиль')],[
                  KeyboardButton(text = '🌦 Запуск погоды'),
-                 KeyboardButton(text = '🛎 Запуск уведомлений')]]
+                 KeyboardButton(text = '🛎 Запуск уведомлений'),
+                 KeyboardButton(text = 'Запуск вк групп'),
+                 KeyboardButton(text='Запуск склейки')]]
 markup_main_admin = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=builder_main_admin)
+
+async def auth_handler():
+    """Обработчик двухфакторной аутентификации (если включена)
+    """
+    key = input('Enter authentication code: ')
+    return key, True
+
+async def getAttachments(msg, vk):
+    attachList = []
+
+    for att in msg['attachments'][0:]:
+
+        attType = att.get('type')
+
+        attachment = att[attType]
+
+        if attType == 'photo':  # Проверка на тип фотографии
+
+            for photoType in attachment.get('sizes')[0:]:
+                if photoType.get('type') == 'x':  # <=604x604
+                    attachments = photoType.get('url')
+                if photoType.get('type') == 'y':  # >605x605
+                    attachments = photoType.get('url')
+                if photoType.get('type') == 'z':  # <=1280x720
+                    attachments = photoType.get('url')
+                if photoType.get('type') == 'w':  # >1280x720
+                    attachments = photoType.get('url')  # <=2560x1440
+                    attType = 'other'
+
+        elif attType == 'doc':  # Проверка на тип документа:
+            # Про типы документов можно узнать тут: https://vk.com/dev/objects/doc
+            docType = attachment.get('type')
+            if docType != 3 and docType != 4 and docType != 5:
+                attType = 'other'
+            if attachment.get('url'):
+                attachments = attachment.get('url')
+
+        elif attType == 'sticker':  # Проверка на стикеры:
+            for sticker in attachment.get('images')[0:]:
+                # Можно 256 или 512, но будет слишком огромная пикча
+                if sticker.get('width') == 128:
+                    attachments = sticker.get('url')
+
+        elif attType == 'audio':
+            attachments = str('𝅘𝅥𝅮 ' + attachment.get('artist') + ' - ' +
+                              attachment.get('title') + ' 𝅘𝅥𝅮')
+            attType = 'other'
+
+        elif attType == 'audio_message':
+            attachments = attachment.get('link_ogg')
+
+        elif attType == 'video':
+
+            ownerId = str(attachment.get('owner_id'))
+            videoId = str(attachment.get('id'))
+            accesskey = str(attachment.get('access_key'))
+
+            fullURL = str(ownerId + '_' + videoId + '_' + accesskey)
+
+            attachments = vk.video.get(videos=fullURL)['items'][0].get('player')
+
+        elif attType == 'graffiti':
+            attType = 'other'
+            attachments = attachment.get('url')
+
+        elif attType == 'link':
+            attType = 'other'
+            attachments = attachment.get('url')
+
+        elif attType == 'wall':
+            attType = 'other'
+            attachments = 'https://vk.com/wall'
+            from_id = str(attachment.get('from_id'))
+            post_id = str(attachment.get('id'))
+            attachments += from_id + '_' + post_id
+
+        elif attType == 'wall_reply':
+            attType = 'other'
+            attachments = 'https://vk.com/wall'
+            owner_id = str(attachment.get('owner_id'))
+            reply_id = str(attachment.get('id'))
+            post_id = str(attachment.get('post_id'))
+            attachments += owner_id + '_' + post_id
+            attachments += '?reply=' + reply_id
+
+        elif attType == 'poll':
+            attType = 'other'
+            attachments = 'https://vk.com/poll'
+            owner_id = str(attachment.get('owner_id'))
+            poll_id = str(attachment.get('id'))
+            attachments += owner_id + '_' + poll_id
+        # Неизвестный тип?
+        else:
+
+            attachments = None
+
+        attachList.append({'type': attType,
+                           'link': attachments})
+
+    # print( attachList )
+
+    return attachList[0]
+
+async def vk_groups(message):
+    #Авторизация
+    vk_session = VkApi(config.login, config.password, auth_handler=auth_handler)
+    vk_session.auth()
+    vk = vk_session.get_api()
+    #Список с группами, откуда брать информацию
+    owner = ['-179693938','470321723','-3375573','-1164947','-181129762']
+    #Словарь с источником и его именем
+    author = {'-179693938': 'СТИ НИТУ "МИСиС"','470321723': 'Директор','-3375573': 'ГСС','-1164947': 'ФСС','-181129762': 'СМУ'}
+    texts = []
+    texts_m = []
+    #Проверка записей в группах с интервалом в 1 час
+    time_zone = 10800
+    while True:
+        #Разница в 3 часа
+        for i in owner:
+            check_id_sql = """SELECT date_news, time_news from starostat_news where origin_source = :idd"""
+            record = cursor.execute(check_id_sql, [i]).fetchall()
+            posts = vk.wall.get(owner_id=i, count=3)['items']
+            posts_strings = [post['text'] for post in posts]
+            posts_time = [post['date'] for post in posts]
+
+
+#Счетчики для подсчета новостей и правильной выборке времени
+            global сount, count_news
+            count = 0
+            count_news = 0
+
+
+            # Делаем перекодировку, так как смайлики в постах вызывают ошибку
+            for post in posts_strings:
+                text_one = post.split(" ")
+                text = " ".join(text_one).encode('cp1251', 'ignore').decode('cp1251', 'ignore')
+                texts.append(text)
+
+            for text in texts:
+                time = datetime.datetime.utcfromtimestamp(posts_time[count]+time_zone)
+                time_news = time.strftime('%H:%M:%S')
+                date_news = time.strftime("%d.%m.%y")
+                # print((post.encode('cp1251', 'ignore').decode('cp1251', 'ignore')))
+
+                msg = vk.wall.get(owner_id=i, count=3)['items'][count]
+                # смотрим, пересылка ли это
+                try:
+                    #print('\n---------------------------------------------------------------------------------\n',
+                    #      'Пересылка\n')
+                    url = await getAttachments(msg['copy_history'][0],vk)
+                    url = '\n' + url['link'] + '\n'
+                    posts_copy_history = msg['copy_history'][0]
+                    posts_strings = posts_copy_history['text']
+                    text_one = posts_strings.split(" ")
+                    text = " ".join(text_one).encode('cp1251', 'ignore').decode('cp1251', 'ignore')
+                    text = text + url
+
+                except:
+                    #print('\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n',
+                    #      'Личный пост\n')
+                    url = await getAttachments(msg,vk)
+                    url = '\n' + url['link'] + '\n'
+                    text = text + url
+                    #Если будет необходимов вытягивать каждую фотку, то раскоментировать код и список возвращать
+                    # for ur in url_m:
+                    #     url = '\n' + ur['link'] + '\n'
+                    #     text = text + url
+                #Проверяем есть ли в базе запись с аналогичным временем и днем
+                for rec in record:
+                    if rec[0] == date_news and time_news == rec[1]:
+                        count_news = count_news + 1
+
+
+                if count_news > 0 or text is None or text == '':
+                    pass
+                    #print('Новсть уже есть в базе','---','Пустой пост','---','Пересылка')
+                else:
+                    id_news_table = """SELECT id_news from starostat_news """
+                    records = cursor.execute(id_news_table, ).fetchall()
+                    id_news = int(records[-1][-1]) + 1
+                    sqlite_insert_with_param = """INSERT INTO starostat_news
+                                          (id_news, date_news, time_news, author, text, origin_source)
+                                          VALUES (:id_news, :date_news, :time_news, :author, :text, :idd)"""
+
+                    authors = author[i]
+                    data_tuple = {'id_news': int(id_news), 'date_news': date_news, 'time_news': time_news,
+                                  'author': authors, 'text': text, 'idd': i}
+                    cursor.execute(sqlite_insert_with_param, data_tuple)
+                    conn.commit()
+                    print(f"Переменные Python {data_tuple} успешно вставлены в таблицу startostat_news")
+                count_news = 0
+                count = count + 1
+            texts = []
+
+        await asyncio.sleep(3600) #Запускаем раз в час
+
 
 
 async def insert_varible_into_table_group(id_user, group_name, message: Message):
@@ -161,55 +359,56 @@ async def schedule(id_user, daynum, weeknum, message: Message):
 async def update_news_table(message: Message):
     flag = True
     news_count = 0
-    while flag:
-        news_rownum_sql = """SELECT id_news, date_news, time_news, author, text from starostat_news"""
-        rownum_sql = cursor.execute(news_rownum_sql, ).fetchall()
-        print(rownum_sql[0])
-        count = 0
-        for i in range(1, len(rownum_sql)):
-            if rownum_sql[i][1] == rownum_sql[i - 1][1] and rownum_sql[i][2][0:5] == rownum_sql[i - 1][2][0:5] and rownum_sql[i - 1][3] == rownum_sql[i][3]:
-                update_table_str = """UPDATE starostat_news SET text =: text  where id_news =: id_news"""
-                text = rownum_sql[i - 1][4] + '\n' + rownum_sql[i][4]
-                id_news = rownum_sql[i - 1][0]
-                update_table_dict = {'text': text, 'id_news': id_news}
-                update_table = cursor.execute(update_table_str, update_table_dict)
-                conn.commit()
-                id_news_d = rownum_sql[i][0]
-                delete_table_str = """DELETE FROM starostat_news where id_news =: id_news_d"""
-                delete_table = cursor.execute(delete_table_str, [id_news_d])
-                conn.commit()
-                print('успешно: ', rownum_sql[i - 1][4] + '\n' + rownum_sql[i][4], ' ', [rownum_sql[i][0]])
-                news_count = news_count + 1
-                break
-            else:
-                count = count + 1
-                # print(rownum_sql[i-1][2][0:5],int(rownum_sql[i-1][2][3:5])-1)
-                if count == len((rownum_sql)) - 1:
-                    flag = False
-    if news_count > 0:
-        await message.answer(f'Успешно склеено {news_count} новости(ей)')
-    else:
-        await message.answer("Отсутствуют новости для склеивания")
-
+    while True:
+        while flag:
+            news_rownum_sql = """SELECT id_news, date_news, time_news, author, text from starostat_news"""
+            rownum_sql = cursor.execute(news_rownum_sql, ).fetchall()
+            #print(rownum_sql[0])
+            count = 0
+            for i in range(1, len(rownum_sql)):
+                if rownum_sql[i][1] == rownum_sql[i - 1][1] and rownum_sql[i][2][0:5] == rownum_sql[i - 1][2][0:5] and rownum_sql[i - 1][3] == rownum_sql[i][3]:
+                    update_table_str = """UPDATE starostat_news SET text =: text  where id_news =: id_news"""
+                    text = rownum_sql[i - 1][4] + '\n' + rownum_sql[i][4]
+                    id_news = rownum_sql[i - 1][0]
+                    update_table_dict = {'text': text, 'id_news': id_news}
+                    update_table = cursor.execute(update_table_str, update_table_dict)
+                    conn.commit()
+                    id_news_d = rownum_sql[i][0]
+                    delete_table_str = """DELETE FROM starostat_news where id_news =: id_news_d"""
+                    delete_table = cursor.execute(delete_table_str, [id_news_d])
+                    conn.commit()
+                    print('успешно: ', rownum_sql[i - 1][4] + '\n' + rownum_sql[i][4], ' ', [rownum_sql[i][0]])
+                    news_count = news_count + 1
+                    break
+                else:
+                    count = count + 1
+                    # print(rownum_sql[i-1][2][0:5],int(rownum_sql[i-1][2][3:5])-1)
+                    if count == len((rownum_sql)) - 1:
+                        flag = False
+        if news_count > 0:
+            await message.answer(f'Успешно склеено {news_count} новости(ей)')
+        else:
+            await message.answer("Отсутствуют новости для склеивания")
+        await asyncio.sleep(1800)
 
 async def news(id_user, message: Message):
     news_rownum_sql = """SELECT id_news from starostat_news"""
     rownum_sql = cursor.execute(news_rownum_sql, ).fetchall()
     end_news = int(len(rownum_sql))
 
-    news_news_sql = """SELECT date_news, time_news, author, text, id_news from starostat_news"""
+    news_news_sql = """SELECT date_news, time_news, author, text, id_news from starostat_news order by id_news"""
     records = cursor.execute(news_news_sql, ).fetchall()
 
     news_rownum_user_news_view = """SELECT news_view from users where id_user =: id_user"""
     news_rownum = cursor.execute(news_rownum_user_news_view, [id_user]).fetchall()
     count = 0
-    print(records[0], records[0][1], records[1][1])
+    #print(records[0], records[0][1], records[1][1])
     for row in news_rownum:
         news_rownum_news = str(row[0])
     for i in records:
         news_rownum_count = news_rownum_news.split(',')
         test_1 = str(i[4]).split(' ')
-        print(str(test_1[0]) not in news_rownum_count)
+        #print(str(test_1[0]) not in news_rownum_count)
 
         if str(test_1[0]) not in news_rownum_count:
             news_rownum_news = news_rownum_news + ',' + str(i[4])
@@ -237,6 +436,29 @@ async def news_all(id_user):
     #      InlineKeyboardButton(text='ПТ', callback_data='sdsa'), InlineKeyboardButton(text='СБ', callback_data='sdsa')]]
     # keyboard1 = InlineKeyboardMarkup(inline_keyboard=builder_i)
     # await message.answer("Как подавать котлеты?", reply_markup=keyboard1)
+
+async def lk(message: Message):
+    group_name_users = """SELECT group_name from users where id_user =: id_user"""
+    records = cursor.execute(group_name_users, [message.from_user.id]).fetchall()
+    if records[0][0] != None:
+        group_name_users = """SELECT group_name, notifications from users where id_user =: id_user"""
+        records = cursor.execute(group_name_users, [message.from_user.id]).fetchall()
+        group_name = records[0][0]
+        notifications = [f'за {records[0][1]} минуты' if records[0][1] != None else 'не подключены']
+        await message.answer(f'Профиль: студент\n'
+                             f'Группа: {group_name}\n'
+                             f'Подгруппа: \n'
+                             f'Уведомления: {notifications[0]}\n\n'
+                             f'Для сброса аккаунта можно использовать /delete')
+    else:
+        group_name_users = """SELECT FIO, notifications from users where id_user =: id_user"""
+        records = cursor.execute(group_name_users, [message.from_user.id]).fetchall()
+        FIO = records[0][0]
+        notifications = [f'за {records[0][1]} минуты' if records[0][1] != None else 'не подключены']
+        await message.answer(f'Профиль: преподаватель\n'
+                             f'ФИО: {FIO}\n'
+                             f'Уведомления: {notifications[0]}\n\n'
+                             f'Для сброса аккаунта можно использовать /delete')
 
 async def weather(message: Message):
     flag_time_sleep = True
@@ -738,6 +960,12 @@ async def text_button(message: Message, state: FSMContext) -> Any:
         await weather(message)
     elif message.text == '🛎 Запуск уведомлений':
         await time_sleep_notifications(message)
+    elif message.text == 'Профиль':
+        await lk(message)
+    elif message.text == 'Запуск вк групп':
+        await vk_groups(message)
+    elif message.text == 'Запуск склейки':
+        await update_news_table(message)
     else:
         print('Бывает')
 
