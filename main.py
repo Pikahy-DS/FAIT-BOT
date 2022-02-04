@@ -44,12 +44,12 @@ lesson_time = {1: '09:00-10:30',
 builder_main = [[KeyboardButton(text='Расписание'),
                  KeyboardButton(text='Новости'),
                  KeyboardButton(text = 'Уведомления')],
-                [KeyboardButton(text='/delete')]]
+                [KeyboardButton(text='Профиль')]]
 markup_main = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=builder_main)
 builder_main_admin = [[KeyboardButton(text='Расписание'),
                  KeyboardButton(text='Новости'),
                  KeyboardButton(text = 'Уведомления')],
-                [KeyboardButton(text='/delete'),
+                [KeyboardButton(text='Профиль'),
                  KeyboardButton(text = '🌦 Запуск погоды'),
                  KeyboardButton(text = '🛎 Запуск уведомлений')]]
 markup_main_admin = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=builder_main_admin)
@@ -237,6 +237,29 @@ async def news_all(id_user):
     #      InlineKeyboardButton(text='ПТ', callback_data='sdsa'), InlineKeyboardButton(text='СБ', callback_data='sdsa')]]
     # keyboard1 = InlineKeyboardMarkup(inline_keyboard=builder_i)
     # await message.answer("Как подавать котлеты?", reply_markup=keyboard1)
+
+async def lk(message: Message):
+    group_name_users = """SELECT group_name from users where id_user =: id_user"""
+    records = cursor.execute(group_name_users, [message.from_user.id]).fetchall()
+    if records[0][0] != None:
+        group_name_users = """SELECT group_name, notifications from users where id_user =: id_user"""
+        records = cursor.execute(group_name_users, [message.from_user.id]).fetchall()
+        group_name = records[0][0]
+        notifications = [f'за {records[0][1]} минуты' if records[0][1] != None else 'не подключены']
+        await message.answer(f'Профиль: студент\n'
+                             f'Группа: {group_name}\n'
+                             f'Подгруппа: \n'
+                             f'Уведомления: {notifications[0]}\n\n'
+                             f'Для сброса аккаунта можно использовать /delete')
+    else:
+        group_name_users = """SELECT FIO, notifications from users where id_user =: id_user"""
+        records = cursor.execute(group_name_users, [message.from_user.id]).fetchall()
+        FIO = records[0][0]
+        notifications = [f'за {records[0][1]} минуты' if records[0][1] != None else 'не подключены']
+        await message.answer(f'Профиль: преподаватель\n'
+                             f'ФИО: {FIO}\n'
+                             f'Уведомления: {notifications[0]}\n\n'
+                             f'Для сброса аккаунта можно использовать /delete')
 
 async def weather(message: Message):
     flag_time_sleep = True
@@ -738,6 +761,8 @@ async def text_button(message: Message, state: FSMContext) -> Any:
         await weather(message)
     elif message.text == '🛎 Запуск уведомлений':
         await time_sleep_notifications(message)
+    elif message.text == 'Профиль':
+        await lk(message)
     else:
         print('Бывает')
 
