@@ -49,11 +49,7 @@ markup_main = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=builder_main)
 builder_main_admin = [[KeyboardButton(text='Расписание'),
                  KeyboardButton(text='Новости'),
                  KeyboardButton(text = 'Уведомления')],
-<<<<<<< HEAD
                 [KeyboardButton(text='Профиль')],[
-=======
-                [KeyboardButton(text='Профиль'),
->>>>>>> main
                  KeyboardButton(text = '🌦 Запуск погоды'),
                  KeyboardButton(text = '🛎 Запуск уведомлений'),
                  KeyboardButton(text = 'Запуск вк групп'),
@@ -966,13 +962,10 @@ async def text_button(message: Message, state: FSMContext) -> Any:
         await time_sleep_notifications(message)
     elif message.text == 'Профиль':
         await lk(message)
-<<<<<<< HEAD
     elif message.text == 'Запуск вк групп':
         await vk_groups(message)
     elif message.text == 'Запуск склейки':
         await update_news_table(message)
-=======
->>>>>>> main
     else:
         print('Бывает')
 
