@@ -171,6 +171,7 @@ async def vk_groups(message):
     texts_m = []
     #Проверка записей в группах с интервалом в 1 час
     time_zone = 10800
+    await message.answer ('Функция вк группы - запущена')
     while True:
         #Разница в 3 часа
         for i in owner:
@@ -244,7 +245,7 @@ async def vk_groups(message):
                                   'author': authors, 'text': text, 'idd': i}
                     cursor.execute(sqlite_insert_with_param, data_tuple)
                     conn.commit()
-                    print(f"Переменные Python {data_tuple} успешно вставлены в таблицу startostat_news")
+                    #print(f"Переменные Python {data_tuple} успешно вставлены в таблицу startostat_news")
                 count_news = 0
                 count = count + 1
             texts = []
@@ -288,7 +289,7 @@ async def read_lesson_teacher(id_user, daynum, weeknum, message: Message):
     teachers = records[0][0]
     sql = """SELECT * FROM schedule WHERE lower(teacher) = lower(:teachers) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
     num = cursor.execute(sql, {'teachers': teachers, 'daynum': daynum, 'weeknum': weeknum}).fetchall()
-    print(records[0][0], daynum, weeknum)
+    #print(records[0][0], daynum, weeknum)
     d = {}
     for row in num:
         key = f"{row[1]} {row[2]}"
@@ -306,7 +307,7 @@ async def read_lesson_teacher(id_user, daynum, weeknum, message: Message):
                 f'<u><b>{row[1]} пара - {lesson_time[row[1]]}:</b></u>\n'
                 f'<b>Предмет:</b> {row[2]}\n<b>Группа(ы):</b> {", ".join(d[key])}\n'
                 f'<b>Формат:</b> {row[3]}\n<b>Аудитория:</b> {row[5]}')
-            print(f'{row[1]} пара - {lesson_time[row[1]]}:\n{row[2]}\n{", ".join(d[key])}\n{row[3]}\n{row[5]}')
+            #print(f'{row[1]} пара - {lesson_time[row[1]]}:\n{row[2]}\n{", ".join(d[key])}\n{row[3]}\n{row[5]}')
             d[key] = []
 
         # bot.send_message(message.chat.id, f"http://r.sf-misis.ru/teacher/{num[0][0]}")
@@ -324,10 +325,10 @@ async def read_lesson(id_user, daynum, weeknum, message: Message):
     group_name = records[0][0]
     sql = """SELECT * FROM schedule WHERE lower(group_name) = lower(:group_name) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
     num = cursor.execute(sql, {'group_name': group_name, 'daynum': daynum, 'weeknum': weeknum}).fetchall()
-    print(records[0][0], daynum, weeknum)
+    #print(records[0][0], daynum, weeknum)
     if num:
         for row in num:
-            print(row)
+            #print(row)
             await message.answer(
                 f'<u><b>{row[1]} пара - {lesson_time[row[1]]}</b></u>:\n'
                 f'<b>Предмет:</b> {row[2]}\n<b>Препод.:</b> {row[4]}\n'
@@ -357,16 +358,18 @@ async def schedule(id_user, daynum, weeknum, message: Message):
 # склейка новостей
 
 async def update_news_table(message: Message):
+    await message.answer ("Функция склейка новостей - запущена")
     flag = True
-    news_count = 0
     while True:
+        news_count = 0
         while flag:
             news_rownum_sql = """SELECT id_news, date_news, time_news, author, text from starostat_news"""
             rownum_sql = cursor.execute(news_rownum_sql, ).fetchall()
             #print(rownum_sql[0])
             count = 0
             for i in range(1, len(rownum_sql)):
-                if rownum_sql[i][1] == rownum_sql[i - 1][1] and rownum_sql[i][2][0:5] == rownum_sql[i - 1][2][0:5] and rownum_sql[i - 1][3] == rownum_sql[i][3]:
+                if rownum_sql[i][1] == rownum_sql[i - 1][1] and rownum_sql[i][2][0:5] == rownum_sql[i - 1][2][0:5] and rownum_sql[i - 1][3] == rownum_sql[i][3] and (len(rownum_sql[i][4].encode('utf-8'))+len(rownum_sql[i-1][4].encode('utf-8'))) < 4000:
+                    #print(len(rownum_sql[i-1][4].encode('utf-8')), ' -------------------------', len(rownum_sql[i][4].encode('utf-8')))
                     update_table_str = """UPDATE starostat_news SET text =: text  where id_news =: id_news"""
                     text = rownum_sql[i - 1][4] + '\n' + rownum_sql[i][4]
                     id_news = rownum_sql[i - 1][0]
@@ -377,7 +380,7 @@ async def update_news_table(message: Message):
                     delete_table_str = """DELETE FROM starostat_news where id_news =: id_news_d"""
                     delete_table = cursor.execute(delete_table_str, [id_news_d])
                     conn.commit()
-                    print('успешно: ', rownum_sql[i - 1][4] + '\n' + rownum_sql[i][4], ' ', [rownum_sql[i][0]])
+                    #print('успешно: ', rownum_sql[i - 1][4] + '\n' + rownum_sql[i][4], ' ', [rownum_sql[i][0]])
                     news_count = news_count + 1
                     break
                 else:
@@ -386,10 +389,12 @@ async def update_news_table(message: Message):
                     if count == len((rownum_sql)) - 1:
                         flag = False
         if news_count > 0:
-            await message.answer(f'Успешно склеено {news_count} новости(ей)')
+            pass
+            #await message.answer(f'Успешно склеено {news_count} новости(ей)')
         else:
-            await message.answer("Отсутствуют новости для склеивания")
-        await asyncio.sleep(1800)
+            pass
+            #await message.answer("Отсутствуют новости для склеивания")
+        await asyncio.sleep(60)
 
 async def news(id_user, message: Message):
     news_rownum_sql = """SELECT id_news from starostat_news"""
@@ -428,7 +433,7 @@ async def news_all(id_user):
     mews = news_rownum[0][0]
     news_news_user = """SELECT date_news, time_news, author, text from starostat_news where id_news <>: mews"""
     news_news = cursor.execute(news_news_user, [mews]).fetchall()
-    print(news_news)
+    #print(news_news)
 
     # builder_i = [
     #     [InlineKeyboardButton(text='ПН', callback_data='ss'), InlineKeyboardButton(text='ВТ', callback_data='sdsa'),
@@ -472,7 +477,7 @@ async def weather(message: Message):
             select_weather_schedule_sql = """SELECT id_user from users"""
             select_weather_schedule = cursor.execute(select_weather_schedule_sql, ).fetchall()
             for i in select_weather_schedule:
-                print(i[0])
+                #print(i[0])
                 group_name_users = """SELECT group_name from users where id_user =: id_user"""
                 records = cursor.execute(group_name_users, [i[0]]).fetchall()
                 if records[0][0] != None:
@@ -480,25 +485,25 @@ async def weather(message: Message):
                     sql = """SELECT * FROM schedule WHERE lower(group_name) = lower(:group_name) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
                     num = cursor.execute(sql,
                                          {'group_name': group_name, 'daynum': daynum, 'weeknum': weeknum}).fetchall()
-                    print(records[0][0], daynum, weeknum)
+                    #print(records[0][0], daynum, weeknum)
                     if num:
+                        await bot.send_message(i[0],f'Доброе утро! Ваши пары на сегодня:\n')
                         for row in num:
-                            print(row)
+                            #print(row)
                             await bot.send_message(i[0],
-                                                   f'Доброе утро! Ваши пары на сегодня:\n'
                                                    f'<u><b>{row[1]} пара - {lesson_time[row[1]]}</b></u>:\n'
                                                    f'<b>Предмет:</b> {row[2]}\n<b>Препод.:</b> {row[4]}\n'
                                                    f'<b>Формат: </b>{row[3]}\n<b>Аудитория:</b> {row[5]}')
                             # bot.send_message(message.chat.id, f"http://r.sf-misis.ru/group/{num[0][0]}")
                     else:
-                        await bot.send_message(i[0], f'У вас сегодня нет пар!')
+                        await bot.send_message(i[0], f'Доброе утро!\nУ вас сегодня нет пар!')
                 else:
                     group_name_users = """SELECT lower(FIO) from users where id_user =: id_user"""
                     records = cursor.execute(group_name_users, [i[0]]).fetchall()
                     teachers = records[0][0]
                     sql = """SELECT * FROM schedule WHERE lower(teacher) = lower(:teachers) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
                     num = cursor.execute(sql, {'teachers': teachers, 'daynum': daynum, 'weeknum': weeknum}).fetchall()
-                    print(records[0][0], daynum, weeknum)
+                    #print(records[0][0], daynum, weeknum)
                     d = {}
                     for row in num:
                         key = f"{row[1]} {row[2]}"
@@ -508,22 +513,22 @@ async def weather(message: Message):
                             d[key] = [row[0]]
 
                     if num:
+                        await bot.send_message(i[0],f'Доброе утро! Ваши пары на сегодня:\n')
                         for row in num:
                             key = f"{row[1]} {row[2]}"
                             if not d[key]:
                                 continue
                             await bot.send_message(i[0],
-                                                   f'Доброе утро! Ваши пары на сегодня:\n'
                                                    f'<u><b>{row[1]} пара - {lesson_time[row[1]]}:</b></u>\n'
                                                    f'<b>Предмет:</b> {row[2]}\n<b>Группа(ы):</b> {", ".join(d[key])}\n'
                                                    f'<b>Формат:</b> {row[3]}\n<b>Аудитория:</b> {row[5]}')
-                            print(
-                                f'{row[1]} пара - {lesson_time[row[1]]}:\n{row[2]}\n{", ".join(d[key])}\n{row[3]}\n{row[5]}')
+                            #print(
+                             #   f'{row[1]} пара - {lesson_time[row[1]]}:\n{row[2]}\n{", ".join(d[key])}\n{row[3]}\n{row[5]}')
                             d[key] = []
 
                         # bot.send_message(message.chat.id, f"http://r.sf-misis.ru/teacher/{num[0][0]}")
                     else:
-                        await bot.send_message(i[0],f'У вас сегодня нет пар!')
+                        await bot.send_message(i[0],f'Доброе утро!\nУ вас сегодня нет пар!')
                 try:
                     config_dict = get_default_config()
                     config_dict['language'] = 'RU'
@@ -548,12 +553,12 @@ async def delete_time_sleep_notifications(message: Message):
     str_select_time_sleep = None
     select_time_sleep_sql = """SELECT notifications from users where id_user =: id_user"""
     select_time_sleep = cursor.execute(select_time_sleep_sql, [message.chat.id]).fetchall()
-    print(message.chat.id)
+    #print(message.chat.id)
     update_time_sleep_sql = """UPDATE users SET notifications =: notifications where id_user =: id_user"""
     data_tuple = {'notifications': str_select_time_sleep, 'id_user': message.chat.id}
     cursor.execute(update_time_sleep_sql, data_tuple)
     conn.commit()
-    print('Успешно удалены', '====', str_select_time_sleep)
+    #print('Успешно удалены', '====', str_select_time_sleep)
 
 async def time_sleep_notifications(message: Message):
     flag_time_sleep = True
@@ -563,13 +568,13 @@ async def time_sleep_notifications(message: Message):
     while flag_time_sleep == True:
         select_time_sleep_sql = """SELECT id_user,group_name,FIO,notifications from users"""
         select_time_sleep = cursor.execute(select_time_sleep_sql, ).fetchall()
-        print(select_time_sleep)
+        #print(select_time_sleep)
         for j in range(0, len(select_time_sleep)):
             str_select_time_sleep = select_time_sleep[j][3]
             if str_select_time_sleep is None:
                 continue
             for time_sleep_one in str_select_time_sleep.split(','):
-                print(time_sleep_one)
+                #print(time_sleep_one)
                 # Узнаем текущее время, дату и неделю
                 date1 = datetime.datetime.now().strftime('%H:%M')
                 weeknum = datetime.datetime.now().isocalendar().week % 2
@@ -583,7 +588,7 @@ async def time_sleep_notifications(message: Message):
                 #Если пользователь студент
 
                 if group_name is not None:
-                    print(group_name)
+                    #print(group_name)
                     sql = """SELECT number_lesson FROM schedule WHERE lower(group_name) = lower(:group_name) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
                     num = cursor.execute(sql,
                                          {'group_name': group_name, 'daynum': daynum, 'weeknum': weeknum}).fetchall()
@@ -613,10 +618,10 @@ async def time_sleep_notifications(message: Message):
                 # Если пользователя преподаватель
                 else:
                     teachers = select_time_sleep[j][2]
-                    print(teachers)
+                    #print(teachers)
                     sql = """SELECT DISTINCT (number_lesson) FROM schedule WHERE lower(teacher) = lower(:teachers) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
                     num = cursor.execute(sql, {'teachers': teachers, 'daynum': daynum, 'weeknum': weeknum}).fetchall()
-                    print(num)
+                    #print(num)
                     d = {}
                     for i in num:
                         # print(i[0])
@@ -654,7 +659,7 @@ async def time_sleep_notifications(message: Message):
                                     d[key] = []
                     text_lesson = None
                 # Проверка работоспособности
-                print(f"Итерация - {select_time_sleep[j][0]} ---- {text_lesson} --- {time_sleep_one}")
+                #print(f"Итерация - {select_time_sleep[j][0]} ---- {text_lesson} --- {time_sleep_one}")
         await asyncio.sleep(60)
 
 async def time_sleep_notifications_add(time_sleep, message: Message, state: FSMContext):
@@ -709,7 +714,7 @@ async def cancel_handler(message: Message, state: FSMContext) -> None:
 @form_router.message(Form.type_group_teacher, F.text == "Студент")
 async def process_type_group(message: Message, state: FSMContext) -> None:
     await state.update_data(type_group_teacher=message.text)
-    print(message.text)
+    #print(message.text)
     await state.set_state(Form.name)
     await message.answer(f"Введите номер группы в формате - 'АТ-18-1д'", reply_markup=ReplyKeyboardRemove())
 
@@ -731,10 +736,10 @@ async def process_name(message: Message, state: FSMContext) -> None:
     if User['type_group_teacher'] == 'Студент':
         student_check_sql = """SELECT group_name from groups where lower(group_name) = lower(:group_name)"""
         student_check = cursor.execute(student_check_sql, [message.text]).fetchall()
-        print(student_check)
+        #print(student_check)
         if student_check:
             await insert_varible_into_table_group(id_user, User['name'], message)
-            print(User['name'])
+            #print(User['name'])
             await state.clear()
         else:
             await message.answer('Вы ввели несуществующую группу, давайте начнем сначала')
@@ -742,10 +747,10 @@ async def process_name(message: Message, state: FSMContext) -> None:
     else:
         student_check_sql = """SELECT FIO from teachers where lower(FIO) = lower(:FIO)"""
         student_check = cursor.execute(student_check_sql, [message.text]).fetchall()
-        print(student_check)
+        #print(student_check)
         if student_check:
             await insert_varible_into_table_teacher(id_user, User['name'], message)
-            print(User['name'])
+            #print(User['name'])
             await state.clear()
         else:
             await command_start_handler(message, state)
@@ -761,7 +766,7 @@ async def process_time_sleep_notifications(message: Message, state: FSMContext) 
 @form_router.callback_query(lambda c: c.data)
 async def call_handle(call: types.callback_query) -> None:
     if call.data == 'monday0':
-        print('one')
+        #print('one')
         weeknum = 0
         daynum = 1
         name_daynum = 'Понедельник'
@@ -878,7 +883,7 @@ async def sleep_test():
     flag = True
     count = 0
     while flag:
-        print(f"Итерация - {count}")
+        #print(f"Итерация - {count}")
 
         count = count + 1
         await asyncio.sleep(1)
@@ -892,7 +897,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     print(message.from_user.id)
     group_name_users = """SELECT group_name from users where id_user =: id_user"""
     records = cursor.execute(group_name_users, [message.from_user.id]).fetchall()
-    print(records)
+    #print(records)
     if records:
         if message.from_user.id == 1005179687:
             await message.answer(

@@ -12,8 +12,7 @@ import threading
 import urllib.request as ur
 #from PIL import Image  # Для преобразования изображений из webp в PNG
 import sqlite3
-
-
+import cx_Oracle
 
 config.initConfig()
 
@@ -34,16 +33,16 @@ module = sys.modules[__name__]
 def insert_table(time, userName, mbody):
     try:
         date_news = datetime.date.today()
-        conn = sqlite3.connect("C:/Users/DS/YandexDisk/fait/data.db")
+        conn = cx_Oracle.connect('hr/hr2020@ORCLPDB')
         cursor = conn.cursor()
         id_news_table = """SELECT id_news from starostat_news"""
         record = cursor.execute(id_news_table, ).fetchall()
         id_news = int(record[-1][-1]) + 1
         sqlite_insert_with_param = """INSERT INTO starostat_news
                               (id_news, date_news, time_news, author, text)
-                              VALUES (?, ?, ?, ?, ?);"""
+                              VALUES (:id_news, :date_news, :time_news, :author, :text)"""
         if mbody:
-            data_tuple = (int(id_news), date_news, time, userName, mbody)
+            data_tuple = {'id_news':int(id_news),'date_news': date_news,'time_news': time,"author": userName,"text": mbody}
             cursor.execute(sqlite_insert_with_param, data_tuple)
             conn.commit()
             print("Переменные Python успешно вставлены в таблицу users")
