@@ -23,11 +23,11 @@ def initConfig():
 
 	setCell( "vk_AddFriends", False ) # Автоматически добавлять новых пользователей в друзья?
 	setCell( "vk_markAsReadEverything", False) # Помечать прочитанными все сообщения?
-	setCell( "vk_login", "" ) # Логин от аккаунта ВК
-	setCell( "vk_password", "" ) # Пароль от аккаунта ВК
+	setCell( "vk_login", "89531589647" ) # Логин от аккаунта ВК
+	setCell( "vk_password", "Fait2021" ) # Пароль от аккаунта ВК
 
 	setCell( "app_id", 6121396 ) # Приложение, у которого есть доступ взаимодействовать с ВК
-	setCell( "telegram_token", "") # Токен ботинка в Telegram
+	setCell( "telegram_token", "5202491134:AAE-IxDdvI8QwZUF1COZcILvZJOJ4FEqVSM") # Токен ботинка в Telegram
 
 	setCell( "telegram_SendName", False ) # Отправлять в ВК текст с именем отправителя из Telegram
 

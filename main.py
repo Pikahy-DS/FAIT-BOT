@@ -1,5 +1,6 @@
 import logging
 import asyncio
+from re import search
 import sys
 from typing import Any
 from aiogram.dispatcher.filters.state import State, StatesGroup
@@ -395,33 +396,64 @@ async def update_news_table(message: Message):
             pass
             #await message.answer("Отсутствуют новости для склеивания")
         await asyncio.sleep(60)
-
-async def news(id_user, message: Message):
+#news(message.from_user.id, message)
+async def news(id_user, message: Message,type):
     news_rownum_sql = """SELECT id_news from starostat_news"""
     rownum_sql = cursor.execute(news_rownum_sql, ).fetchall()
     end_news = int(len(rownum_sql))
 
-    news_news_sql = """SELECT date_news, time_news, author, text, id_news from starostat_news order by id_news"""
+    if(type[-2:]=='05'):
+        len_news=5
+        print(type[-2:])
+    else:
+        len_news=10
+
+    print("ID user:", id_user)
+    #Если пришет что всё уже просмотренно но ничего не смотрел то надо запустить без 
+    if(type[:-2]=='starostat'):
+        news_news_sql = f"""SELECT * from starostat_news  where id_news in ( select id_news
+from (select INSTR(b.news_view, a.id_news) as newss, b.news_view, a.id_news from starostat_news a, users b where id_user = {id_user} and (origin_source is null )) a
+where (a.newss = 0 or a.newss is null) and rownum <= {len_news} )"""
+    elif(type[:-2]=='group'):
+        news_news_sql = f"""  SELECT * from starostat_news  where id_news in ( select id_news
+from (select INSTR(b.news_view, a.id_news) as newss, b.news_view, a.id_news from starostat_news a, users b where id_user = 411892636 and (a.origin_source = -179693938 
+or origin_source='-181129762'or origin_source='-1164947' or origin_source='-3375573' or origin_source='470321723' )) a
+where (a.newss = 0 or a.newss is null) and  rownum <= {len_news} ) """
+    elif(type[:-2]=='job'):
+        news_news_sql = f"""SELECT * from starostat_news  where id_news in ( select id_news
+from (select INSTR(b.news_view, a.id_news) as newss, b.news_view, a.id_news from starostat_news a, users b where id_user = {id_user} and (text like '%трудоустройств%' )) a
+where (a.newss = 0 or a.newss is null) and rownum <= {len_news} )"""
+    
+    
     records = cursor.execute(news_news_sql, ).fetchall()
 
     news_rownum_user_news_view = """SELECT news_view from users where id_user =: id_user"""
     news_rownum = cursor.execute(news_rownum_user_news_view, [id_user]).fetchall()
     count = 0
-    #print(records[0], records[0][1], records[1][1])
+    for x in records:
+        print(x)
+    
     for row in news_rownum:
         news_rownum_news = str(row[0])
+        print('test1')
+        
+        print('test2')
     for i in records:
+        print('test3')
+        print (i)
         news_rownum_count = news_rownum_news.split(',')
         test_1 = str(i[4]).split(' ')
-        #print(str(test_1[0]) not in news_rownum_count)
+        print(str(test_1[0]) not in news_rownum_count)
 
         if str(test_1[0]) not in news_rownum_count:
-            news_rownum_news = news_rownum_news + ',' + str(i[4])
+            print(str(i[0]))
+            
+            news_rownum_news = news_rownum_news + ',' + str(i[0])
             update_rownum = """UPDATE users SET news_view =: news_rownum_news where id_user =: id_user"""
             update_rownum_news = cursor.execute(update_rownum,
                                                 {'news_rownum_news': news_rownum_news, 'id_user': id_user})
             conn.commit()
-            await message.answer(f'{i[2]}\n {i[0]} - {i[1]}\n{i[3]}')
+            await message.answer(f'{i[3]}\n {i[1]} - {i[2]}\n{i[4]}')
             count = count + 1
     if count == 0:
         await message.answer(f'Вы все просмотрели, новых сообщений нет!')
@@ -559,6 +591,38 @@ async def delete_time_sleep_notifications(message: Message):
     cursor.execute(update_time_sleep_sql, data_tuple)
     conn.commit()
     #print('Успешно удалены', '====', str_select_time_sleep)
+
+
+
+
+#Функция отправки сообщений  при упоминании
+async def send_like_message(message: Message):
+    bot = Bot(TOKEN, parse_mode="html")
+    search_like_message=True
+    await message.answer('Функция send_like_message - запущена!')
+    while search_like_message==True:
+        group_name = """" SELECT group_name from users where id_user = 411892636"""
+        select_like_message = f"""SELECT * from starostat_news  where id_news in ( select id_news
+from (select INSTR(b.news_view, a.id_news) as newss, b.news_view, a.id_news from starostat_news a, users b where id_user =: id_user and (text like '%{group_name}%' )))"""
+        print("Название группы=" + group_name)
+        #update_rownum = """UPDATE users SET news_view =: news_rownum_news where id_user =: id_user"""
+        #select_like_message = cursor.execute(update_rownum,
+        #                                        {'news_rownum_news': select_like_message, 'id_user': id_user})
+        #conn.commit()
+        records = cursor.execute(select_like_message, ).fetchall()
+        print(records)
+        await message.answer(f'{records[3]}\n {records[1]} - {records[2]}\n{records[4]}')
+        await asyncio.sleep(10)
+    
+    #SELECT group_name from users where id_user = 411892636
+    
+async def send_like_message_off(message: Message):
+    
+    search_like_message=False
+    await message.answer('Функция send_like_message - отключена!')
+    
+    
+
 
 async def time_sleep_notifications(message: Message):
     flag_time_sleep = True
@@ -875,6 +939,16 @@ async def call_handle(call: types.callback_query) -> None:
         await call.message.edit_text(f'Все уведомления отключены ',
                                      reply_markup=InlineKeyboardMarkup(inline_keyboard=[[]]))
         #Добавить столбец с временами уведомлений и очищать его при нажатии на кнопку, в виде запроса запрашивать время уведомлений.
+    elif call.data[:-2] == "starostat":
+        await call.message.edit_text(f'Новости из старостата')
+        await news(call.from_user.id, call.message,call.data)
+    elif call.data[:-2] == "group":
+        await call.message.edit_text(f'Новости из группы')
+        await news(call.from_user.id, call.message,call.data)
+    elif call.data[:-2] == "job":
+        await call.message.edit_text(f'Новости по трудоустройству')
+        await news(call.from_user.id, call.message,call.data)
+    
     else:
         print(call)
 
@@ -950,7 +1024,19 @@ async def text_button(message: Message, state: FSMContext) -> Any:
         await message.answer(f'На какой день нужно расписание?\nЧислитель (верх)\Знаменатель (низ)',
                              reply_markup=schedule_markup)
     elif message.text == 'Новости':
-        await news(message.from_user.id, message)
+        builder_schedule = [[InlineKeyboardButton(text='Старостат 5', callback_data='starostat05'),
+                             InlineKeyboardButton(text='Группа Вк 5', callback_data='group05'),
+                             InlineKeyboardButton(text='Трудоустройство 5', callback_data='job05')],
+                             [InlineKeyboardButton(text='Старостат 10', callback_data='starostat10'),
+                             InlineKeyboardButton(text='Группа Вк 10', callback_data='group10'),
+                             InlineKeyboardButton(text='Трудоустройство 10', callback_data='job10')]]
+        schedule_markup = InlineKeyboardMarkup(inline_keyboard=builder_schedule)
+        await message.answer(f'Какие новости вам нужны и сколько?\n',
+                             reply_markup=schedule_markup)
+
+        #await news(message.from_user.id, message)
+
+        
     elif message.text == '1':
         await message.answer('Запрос на склеивание новостей принят!')
         await update_news_table(message)
@@ -971,6 +1057,9 @@ async def text_button(message: Message, state: FSMContext) -> Any:
         await vk_groups(message)
     elif message.text == 'Запуск склейки':
         await update_news_table(message)
+    #не работает проблемы с Sql запросом  ORA-01008
+    elif message.text == 'Запуск оповещения об упоминании':
+        await send_like_message(message)
     else:
         print('Бывает')
 
