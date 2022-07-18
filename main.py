@@ -51,19 +51,69 @@ builder_main_admin = [[KeyboardButton(text='Расписание'),
                  KeyboardButton(text='Новости'),
                  KeyboardButton(text = 'Уведомления')],
                 [KeyboardButton(text='Профиль')],[
-                 KeyboardButton(text = '🌦 Запуск погоды'),
+                 KeyboardButton(text = 'Запуск погоды'),
                  KeyboardButton(text = '🛎 Запуск уведомлений'),
                  KeyboardButton(text = 'Запуск вк групп'),
                  KeyboardButton(text='Запуск склейки')]]
 markup_main_admin = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=builder_main_admin)
+#+
+def _today():                                                     # функция для определения сегодняшнего дня недели          
+    """Функция для определения дня недели и знаминателя числителя
 
+    Returns:
+        string: Возвращает день недели и числитель  или знаменатель в формате 
+        Сегодня  понедельник, знаменатель
+    """
+    day_number = datetime.datetime.now().isocalendar()[2]          # определения номера дня недели
+    week_number = datetime.datetime.now().isocalendar()[1]%2          # определяем четность номера недели
+
+    # записываем в строку день недели
+    if day_number == 1:                                                                     
+        day_string = 'понедельник'
+    elif day_number == 2:
+        day_string = 'вторник'
+    elif day_number == 3:
+        day_string = 'среда'
+    elif day_number == 4:
+        day_string = 'четверг'
+    elif day_number == 5:
+        day_string = 'пятница'
+    elif day_number == 6:
+        day_string = 'суббота'
+    elif day_number == 7:
+        day_string = 'воскресенье'
+    
+    # записываем в строку числитель или знаменатель в зависимости от четности номера недели
+    if week_number == 0:
+        week_string = 'числитель'
+    elif week_number == 1:
+        week_string = 'знаменатель'
+
+    today_string = ('Сегодня ' + day_string + ', ' + week_string)     # записываем все в одну строку
+
+    return today_string                 # возвращаем строку
+#-
 async def auth_handler():
-    """Обработчик двухфакторной аутентификации (если включена)
+    
+    """
+    Обработчик двухфакторной аутентификации (если включена) 
+    Returns:
+        _type_: _description_
     """
     key = input('Enter authentication code: ')
     return key, True
 
+# + - 
 async def getAttachments(msg, vk):
+    """Получение фото из  поста  но это не точно надо будет ещё с этой функций разобраться 
+
+    Args:
+        msg (_type_): _description_
+        vk (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """    
     attachList = []
 
     for att in msg['attachments'][0:]:
@@ -159,7 +209,19 @@ async def getAttachments(msg, vk):
 
     return attachList[0]
 
+""" 
+Есть мысль  о потенциальной проблеме если много пользователей вызовут эту функцию 
+возможно нужно сделать проверку кем является пользователь админ или же просто пользователь 
+Так как если сразу несколько пользователей запустят эту функцию бот может лечь  в теории 
+"""
+# +
 async def vk_groups(message):
+    """_summary_
+    Добавляет новые записи в базу  данных starostat_news c интервалом в 1 час
+    Args:
+        message (_type_): содержит всю информацию о сообщении отправленном пользователе и о том кто отправил сообщение 
+        время ,имя , какой id чата, лучше будет посмотриеть всю эту инфу самому если будет необходиомость работать с ним
+    """
     #Авторизация
     vk_session = VkApi(config.login, config.password, auth_handler=auth_handler)
     vk_session.auth()
@@ -174,7 +236,7 @@ async def vk_groups(message):
     time_zone = 10800
     await message.answer ('Функция вк группы - запущена')
     while True:
-        #Разница в 3 часа
+        #Проходит по списку групп
         for i in owner:
             check_id_sql = """SELECT date_news, time_news from starostat_news where origin_source = :idd"""
             record = cursor.execute(check_id_sql, [i]).fetchall()
@@ -183,7 +245,7 @@ async def vk_groups(message):
             posts_time = [post['date'] for post in posts]
 
 
-#Счетчики для подсчета новостей и правильной выборке времени
+            #Счетчики для подсчета новостей и правильной выборке времени
             global сount, count_news
             count = 0
             count_news = 0
@@ -194,7 +256,8 @@ async def vk_groups(message):
                 text_one = post.split(" ")
                 text = " ".join(text_one).encode('cp1251', 'ignore').decode('cp1251', 'ignore')
                 texts.append(text)
-
+            
+            #Добавление к абсолюдному времени поста  ещё +3 часа по мск
             for text in texts:
                 time = datetime.datetime.utcfromtimestamp(posts_time[count]+time_zone)
                 time_news = time.strftime('%H:%M:%S')
@@ -202,7 +265,8 @@ async def vk_groups(message):
                 # print((post.encode('cp1251', 'ignore').decode('cp1251', 'ignore')))
 
                 msg = vk.wall.get(owner_id=i, count=3)['items'][count]
-                # смотрим, пересылка ли это
+                
+                #Проверка пересылка поста или это личный пост человека
                 try:
                     #print('\n---------------------------------------------------------------------------------\n',
                     #      'Пересылка\n')
@@ -254,8 +318,15 @@ async def vk_groups(message):
         await asyncio.sleep(3600) #Запускаем раз в час
 
 
-
+# -
 async def insert_varible_into_table_group(id_user, group_name, message: Message):
+    """Добавляет новых пользователей в БД как учеников
+
+    Args:
+        id_user (_type_): id пользователя в телеграмме 
+        group_name (_type_):Название группы (пример ИТ-20-1д)
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+    """
     try:
         sqlite_insert_with_param = """INSERT INTO users
                               (id_user, group_name)
@@ -268,8 +339,15 @@ async def insert_varible_into_table_group(id_user, group_name, message: Message)
     except cx_Oracle.Error as error:
         print("Ошибка при работе с Oracle", error)
 
-
+# -
 async def insert_varible_into_table_teacher(id_user, FIO, message: Message):
+    """Добавляет новых пользователей в БД как преподователей 
+
+    Args:
+        id_user (_type_): id пользователя в телеграмме 
+        FIO (_type_): ФИО преподователя 
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+    """    
     try:
         sqlite_insert_with_param = """INSERT INTO users
                               (id_user, FIO)
@@ -283,8 +361,16 @@ async def insert_varible_into_table_teacher(id_user, FIO, message: Message):
     except cx_Oracle.Error as error:
         print("Ошибка при работе с SQLite", error)
 
-
+# -
 async def read_lesson_teacher(id_user, daynum, weeknum, message: Message):
+    """Получение из БД пар для преподавателя и вывод пользователю в сообщении
+
+    Args:
+        id_user (_type_): id пользователя в телеграмме 
+        daynum (_type_): День недели 
+        weeknum (_type_): Числитель или знаменатель
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+    """    
     group_name_users = """SELECT lower(FIO) from users where id_user =: id_user"""
     records = cursor.execute(group_name_users, [id_user]).fetchall()
     teachers = records[0][0]
@@ -319,8 +405,16 @@ async def read_lesson_teacher(id_user, daynum, weeknum, message: Message):
         week_schedule = ['числителю' if weeknum == 0 else ('знаменателю')]
         await message.answer(f'У вас в {daynum_schedule[0]} по {week_schedule[0]} нет пар!')
 
-
+# -
 async def read_lesson(id_user, daynum, weeknum, message: Message):
+    """Получение из БД пар для студентов и вывод пользователю в сообщении
+
+    Args:
+        id_user (_type_): id пользователя в телеграмме 
+        daynum (_type_): День недели 
+        weeknum (_type_): Числитель или знаменатель
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+    """    
     group_name_users = """SELECT group_name from users where id_user =: id_user"""
     records = cursor.execute(group_name_users, [id_user]).fetchall()
     group_name = records[0][0]
@@ -342,9 +436,16 @@ async def read_lesson(id_user, daynum, weeknum, message: Message):
         week_schedule = ['числителю' if weeknum == 0 else ('знаменателю')]
         await message.answer(f'У вас в {daynum_schedule[0]} по {week_schedule[0]} нет пар!')
 
-
-# Вывод расписания
+# -
 async def schedule(id_user, daynum, weeknum, message: Message):
+    """Определение студент или преподователь и запуск соответствующей функции для вывода
+
+    Args:
+        id_user (_type_): id пользователя в телеграмме 
+        daynum (_type_): День недели 
+        weeknum (_type_): Числитель или знаменатель
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+    """    
     try:
         group_name_users = """SELECT group_name from users where id_user =: id_user"""
         records = cursor.execute(group_name_users, [id_user]).fetchall()
@@ -357,8 +458,13 @@ async def schedule(id_user, daynum, weeknum, message: Message):
 
 
 # склейка новостей
-
+#   --- 
 async def update_news_table(message: Message):
+    """склейка новостей
+
+    Args:
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+    """    
     await message.answer ("Функция склейка новостей - запущена")
     flag = True
     while True:
@@ -397,7 +503,16 @@ async def update_news_table(message: Message):
             #await message.answer("Отсутствуют новости для склеивания")
         await asyncio.sleep(60)
 #news(message.from_user.id, message)
+
+#-
 async def news(id_user, message: Message,type):
+    """Функция для получения из бд новостей по теме которую запросил пользователь и вывода их пользователю 
+
+    Args:
+        id_user (_type_): id пользователя в телеграмме 
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+        type (_type_): Тип новости который запросил пользователь из старостата , групп вк или же по трудоустройству
+    """    
     news_rownum_sql = """SELECT id_news from starostat_news"""
     rownum_sql = cursor.execute(news_rownum_sql, ).fetchall()
     end_news = int(len(rownum_sql))
@@ -435,11 +550,8 @@ where (a.newss = 0 or a.newss is null) and rownum <= {len_news} )"""
     
     for row in news_rownum:
         news_rownum_news = str(row[0])
-        print('test1')
         
-        print('test2')
     for i in records:
-        print('test3')
         print (i)
         news_rownum_count = news_rownum_news.split(',')
         test_1 = str(i[4]).split(' ')
@@ -458,8 +570,13 @@ where (a.newss = 0 or a.newss is null) and rownum <= {len_news} )"""
     if count == 0:
         await message.answer(f'Вы все просмотрели, новых сообщений нет!')
 
-
+#-
 async def news_all(id_user):
+    """Функция для получения из бд всех новостей  (не используется сейчас)
+
+    Args:
+        id_user (_type_): id пользователя в телеграмме
+    """   
     news_rownum_user = """SELECT news_view from users"""
     news_rownum = cursor.execute(news_rownum_user, ).fetchall()
     mews = news_rownum[0][0]
@@ -473,8 +590,13 @@ async def news_all(id_user):
     #      InlineKeyboardButton(text='ПТ', callback_data='sdsa'), InlineKeyboardButton(text='СБ', callback_data='sdsa')]]
     # keyboard1 = InlineKeyboardMarkup(inline_keyboard=builder_i)
     # await message.answer("Как подавать котлеты?", reply_markup=keyboard1)
-
+#-
 async def lk(message: Message):
+    """Личный кабинет получение информации о пользователе из бд и вывод это информации на экран 
+
+    Args:
+        message (Message):  сообщение из которого можно достать всю инфу о пользователе
+    """    
     group_name_users = """SELECT group_name from users where id_user =: id_user"""
     records = cursor.execute(group_name_users, [message.from_user.id]).fetchall()
     if records[0][0] != None:
@@ -496,19 +618,27 @@ async def lk(message: Message):
                              f'ФИО: {FIO}\n'
                              f'Уведомления: {notifications[0]}\n\n'
                              f'Для сброса аккаунта можно использовать /delete')
-
+#-
 async def weather(message: Message):
+    """Функция  рассылки погоды и пар 
+
+    Args:
+        message (Message):  сообщение из которого можно достать всю инфу о пользователе
+    """    
     flag_time_sleep = True
     await message.answer('Функция погода - запущена')
     bot = Bot(TOKEN, parse_mode="html")
     while flag_time_sleep:
+        #message.answer
         date1 = datetime.datetime.now().strftime('%H:%M')
-        if date1[0:2] == '08' and date1[3:5] == '00':
-            weeknum = datetime.datetime.now().isocalendar().week % 2
-            daynum = datetime.datetime.now().isocalendar().weekday
+        if date1[0:2] == '8' and date1[3:5] == '00':
+            weeknum = datetime.datetime.now().isocalendar()[2] % 2
+            daynum = datetime.datetime.now().isocalendar()[2]
+            
             select_weather_schedule_sql = """SELECT id_user from users"""
             select_weather_schedule = cursor.execute(select_weather_schedule_sql, ).fetchall()
             for i in select_weather_schedule:
+                
                 #print(i[0])
                 group_name_users = """SELECT group_name from users where id_user =: id_user"""
                 records = cursor.execute(group_name_users, [i[0]]).fetchall()
@@ -517,19 +647,33 @@ async def weather(message: Message):
                     sql = """SELECT * FROM schedule WHERE lower(group_name) = lower(:group_name) AND day_number = :daynum and week = :weeknum ORDER BY number_lesson"""
                     num = cursor.execute(sql,
                                          {'group_name': group_name, 'daynum': daynum, 'weeknum': weeknum}).fetchall()
+                    
                     #print(records[0][0], daynum, weeknum)
+                    #try и except в этом случае нужен для того что бы при остсутствии чата с человеком но 
+                    # наличии его в базе данных пропустить его и не вызывать ошибку прирывая исполнение кода 
                     if num:
-                        await bot.send_message(i[0],f'Доброе утро! Ваши пары на сегодня:\n')
+                        
+                        try:
+                            await bot.send_message(i[0],f'Доброе утро! Ваши пары на сегодня:\n')
+                        except:
+                            continue
                         for row in num:
+                            
                             #print(row)
                             await bot.send_message(i[0],
                                                    f'<u><b>{row[1]} пара - {lesson_time[row[1]]}</b></u>:\n'
                                                    f'<b>Предмет:</b> {row[2]}\n<b>Препод.:</b> {row[4]}\n'
                                                    f'<b>Формат: </b>{row[3]}\n<b>Аудитория:</b> {row[5]}')
                             # bot.send_message(message.chat.id, f"http://r.sf-misis.ru/group/{num[0][0]}")
+                    
                     else:
-                        await bot.send_message(i[0], f'Доброе утро!\nУ вас сегодня нет пар!')
+                    #     #При желании выводить погоду утром закоментировать else полностью иначе оставить
+                    #     await bot.send_message(i[0],f'Доброе утро!\nУ вас сегодня нет пар!')
+                    #     print("Нету пар сегодня")
+                        continue
+
                 else:
+                    
                     group_name_users = """SELECT lower(FIO) from users where id_user =: id_user"""
                     records = cursor.execute(group_name_users, [i[0]]).fetchall()
                     teachers = records[0][0]
@@ -545,6 +689,7 @@ async def weather(message: Message):
                             d[key] = [row[0]]
 
                     if num:
+                        
                         await bot.send_message(i[0],f'Доброе утро! Ваши пары на сегодня:\n')
                         for row in num:
                             key = f"{row[1]} {row[2]}"
@@ -560,28 +705,45 @@ async def weather(message: Message):
 
                         # bot.send_message(message.chat.id, f"http://r.sf-misis.ru/teacher/{num[0][0]}")
                     else:
-                        await bot.send_message(i[0],f'Доброе утро!\nУ вас сегодня нет пар!')
+                    #     #await bot.send_message(i[0],f'Доброе утро!\nУ вас сегодня нет пар!')
+                    #     #print("Нету пар сегодня")
+                        continue
                 try:
+                    
                     config_dict = get_default_config()
                     config_dict['language'] = 'RU'
                     mgr = owm.weather_manager()
                     observation = mgr.weather_at_place('Старый Оскол')
                     w = observation.weather
                     temp = w.temperature('celsius')['temp']
-                    V = w.wind()
-                    clothes = '🥶 Одевайся теплее' if (temp < 20 or V['speed'] > 10) else '🥵 Надевай легкую одежду'
-                    await bot.send_message(i[0],
+                    Wind = w.wind()
+                    # Формула для определения эффективной температуры по госту 
+                    effective_temp = 13.12 + 0.6215 * temp - 11.37 * ((1.5 * Wind["speed"]) ** 0.16)
+                    + 0.3965 * temp * ((1.5 * Wind["speed"]) ** 0.16) 
+                    effective_temp=round(effective_temp, 1)
+                    Feeling_weather = 'Ощущается как ' + str(effective_temp) + '°C'
+                    try:
+                        await bot.send_message(i[0],
                                            'На улице сейчас ' + str(
                                                w.detailed_status) + '\n🌡Температура сейчас в районе ' + str(
                                                int(temp)) + ' °C\n' + '🌬Скорость ветра = ' + str(
-                                               V['speed']) + ' м/с\n' + clothes)
+                                               Wind['speed']) + ' м/с\n' + Feeling_weather) 
+                    except:
+                        print("Ошибка вывода температуры")
+                        continue
                 except Exception:
+                    print("EROR weather")
                     await bot.send_message(i[0],
                                            'Ошибка на сервер, нет связи с сервером погоды!')
 
         await asyncio.sleep(60)
-
+#-
 async def delete_time_sleep_notifications(message: Message):
+    """Убрать оповещения о началах пар
+
+    Args:
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+    """    
     str_select_time_sleep = None
     select_time_sleep_sql = """SELECT notifications from users where id_user =: id_user"""
     select_time_sleep = cursor.execute(select_time_sleep_sql, [message.chat.id]).fetchall()
@@ -592,11 +754,15 @@ async def delete_time_sleep_notifications(message: Message):
     conn.commit()
     #print('Успешно удалены', '====', str_select_time_sleep)
 
-
-
-
 #Функция отправки сообщений  при упоминании
+#-
 async def send_like_message(message: Message):
+    """Функция отправки сообщений  при упоминании 
+
+    Args:
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+    """    
+       
     bot = Bot(TOKEN, parse_mode="html")
     search_like_message=True
     await message.answer('Функция send_like_message - запущена!')
@@ -615,16 +781,22 @@ from (select INSTR(b.news_view, a.id_news) as newss, b.news_view, a.id_news from
         await asyncio.sleep(10)
     
     #SELECT group_name from users where id_user = 411892636
-    
+#-  
 async def send_like_message_off(message: Message):
-    
+    """Отключение функции оправки упоминаний
+
+    Args:
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+    """    
     search_like_message=False
     await message.answer('Функция send_like_message - отключена!')
     
-    
-
-
 async def time_sleep_notifications(message: Message):
+    """Отправка уведомлений о парах перед пар ними 
+
+    Args:
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+    """    
     flag_time_sleep = True
     bot = Bot(TOKEN, parse_mode="html")
     await message.answer('Функция уведомления - запущена!')
@@ -671,7 +843,7 @@ async def time_sleep_notifications(message: Message):
                                                     {'group_name': group_name, 'daynum': daynum, 'weeknum': weeknum,
                                                      'number_lesson': number_l}).fetchall()
                             for row in lesson:
-                                # print(row)
+                                #print(row)
                                 await bot.send_message(select_time_sleep[j][0],
                                               f'{text_lesson}\n'
                                               f'<u><b>{row[1]} пара - {lesson_time[row[1]]}</b></u>:\n'
@@ -726,8 +898,19 @@ async def time_sleep_notifications(message: Message):
                 #print(f"Итерация - {select_time_sleep[j][0]} ---- {text_lesson} --- {time_sleep_one}")
         await asyncio.sleep(60)
 
+#-
+# Сделать запросы раз в сутки, путем добавления все в переменные, для оптимизации
 async def time_sleep_notifications_add(time_sleep, message: Message, state: FSMContext):
-    # Сделать запросы раз в сутки, путем добавления все в переменные, для оптимизации
+    """Включение уведомлений для пользователя и задание времени оповещения
+
+    Args:
+        time_sleep (_type_): Время до начала пар за которое он хочет получить уведомления 
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+        state (FSMContext): содержит ссылку на шаги и прошлую информацию о этих шагах
+    """    
+    print("Нужная мне инфа")
+    print(state)
+    print("Нужная мне инфа кончилась")
     try:
 
         test_time_sleep = int(time_sleep)
@@ -760,9 +943,15 @@ async def time_sleep_notifications_add(time_sleep, message: Message, state: FSMC
 @form_router.message(commands={"cancel"})
 @form_router.message(F.text.casefold() == "cancel")
 async def cancel_handler(message: Message, state: FSMContext) -> None:
-    """
-    Allow user to cancel any action
-    """
+    """ 
+    Прирывание шагов какого либо процесса более продобно можно прочитать тут
+        https://mastergroosha.github.io/telegram-tutorial-2/fsm/
+        в нашем случает это регистрация
+       прошлый коммент  Allow user to cancel any action(Разрешить пользователю отменить любое действие)
+    Args:
+        message (Message): _description_
+        state (FSMContext): _description_
+    """    
     current_state = await state.get_state()
     if current_state is None:
         return
@@ -775,16 +964,29 @@ async def cancel_handler(message: Message, state: FSMContext) -> None:
     )
 
 # Этап регистрации при отсутсвии аккаунта в базе
+#-
 @form_router.message(Form.type_group_teacher, F.text == "Студент")
 async def process_type_group(message: Message, state: FSMContext) -> None:
+    """Этап регистрации при отсутсвии аккаунта в базе для студента
+
+    Args:
+         message (Message): сообщение из которого можно достать всю инфу о пользователе
+        state (FSMContext): содержит ссылку на шаги и прошлую информацию о этих шагах
+    """    
     await state.update_data(type_group_teacher=message.text)
     #print(message.text)
     await state.set_state(Form.name)
     await message.answer(f"Введите номер группы в формате - 'АТ-18-1д'", reply_markup=ReplyKeyboardRemove())
 
-
+#-
 @form_router.message(Form.type_group_teacher, F.text == "Преподаватель")
 async def process_type_teacher(message: Message, state: FSMContext) -> None:
+    """Этап регистрации при отсутсвии аккаунта в базе для преподователей
+
+    Args:
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+        state (FSMContext): содержит ссылку на шаги и прошлую информацию о этих шагах
+    """  
     User = await state.update_data(type_group_teacher=message.text)
     await state.set_state(Form.name)
     builder_teacher = [
@@ -795,6 +997,12 @@ async def process_type_teacher(message: Message, state: FSMContext) -> None:
 
 @form_router.message(Form.name)
 async def process_name(message: Message, state: FSMContext) -> None:
+    """Функция проверки принадлежит ли студент к существующим группам или преподователям и запуск нужной для регистарции
+
+    Args:
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+        state (FSMContext): содержит ссылку на шаги и прошлую информацию о этих шагах
+    """    
     User = await state.update_data(name=message.text)
     id_user = message.from_user.id
     if User['type_group_teacher'] == 'Студент':
@@ -822,6 +1030,12 @@ async def process_name(message: Message, state: FSMContext) -> None:
 
 @form_router.message(Form.time_sleep_notifications)
 async def process_time_sleep_notifications(message: Message, state: FSMContext) -> None:
+    """Запуск функций включени уведомления в виде стадий 
+
+    Args:
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+        state (FSMContext): содержит ссылку на шаги и прошлую информацию о этих шагах
+    """    
     time_state = await state.update_data(time_sleep_notifications=message.text)
     await time_sleep_notifications_add(time_state['time_sleep_notifications'], message, state)
     await state.clear()
@@ -829,6 +1043,12 @@ async def process_time_sleep_notifications(message: Message, state: FSMContext) 
 # Обработка инлайн кнопок
 @form_router.callback_query(lambda c: c.data)
 async def call_handle(call: types.callback_query) -> None:
+    """Обработка инлайн кнопок для пользователя (кнопки которые есть в сообщении пользователю)
+
+    Args:
+        call (types.callback_query): Ответ который присвоен каждой кнопке и при нажатии на которую вернётся 
+        для дальнейшей обработки
+    """    
     if call.data == 'monday0':
         #print('one')
         weeknum = 0
@@ -954,6 +1174,8 @@ async def call_handle(call: types.callback_query) -> None:
 
 
 async def sleep_test():
+    """сейчас не используется 
+    """    
     flag = True
     count = 0
     while flag:
@@ -962,11 +1184,16 @@ async def sleep_test():
         count = count + 1
         await asyncio.sleep(1)
 
-
-
 # Действия при вводе /start
 @form_router.message(commands={"start"})
 async def command_start_handler(message: Message, state: FSMContext) -> None:
+    """Функция начала регастрации пользователя если у него нет аккаунта 
+    или же вывод кнопок для взаимодействия людям у которых есть аккаунт 
+
+    Args:
+        message (Message): сообщение из которого можно достать всю инфу о пользователе
+        state (FSMContext): содержит ссылку на шаги и прошлую информацию о этих шагах
+    """    
     id_user = message.from_user.id
     print(message.from_user.id)
     group_name_users = """SELECT group_name from users where id_user =: id_user"""
@@ -987,10 +1214,15 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         await state.set_state(Form.type_group_teacher)
         await message.reply('Ты кто?', reply_markup=teacher_group)
 
-
 # Удаление аакаунта из базы
 @form_router.message(commands={"delete"})
 async def delete_account(message: Message, state: FSMContext) -> None:
+    """Удаление человека из бд 
+
+    Args:
+        message (Message): ообщение из которого можно достать всю инфу о пользователе
+        state (FSMContext): содержит ссылку на шаги и прошлую информацию о этих шагах
+    """    
     delete_account_sql = """delete
                           users where id_user = :id_user"""
     id_user = message.from_user.id
@@ -1002,10 +1234,18 @@ async def delete_account(message: Message, state: FSMContext) -> None:
     await message.answer('Аккаунт успешно удален')
     await message.answer('Для начала работы с ботом нажмите: /start', reply_markup=markup_delete)
 
-
 # Обработка текстовых сообщений и обычной клавиатуры
 @form_router.message(content_types=['text'])
 async def text_button(message: Message, state: FSMContext) -> Any:
+    """Обработка текстовых сообщений и обычной клавиатуры
+
+    Args:
+        message (Message): ообщение из которого можно достать всю инфу о пользователе
+        state (FSMContext): содержит ссылку на шаги и прошлую информацию о этих шагах
+
+    Returns:
+        Any: _description_
+    """    
     if message.text == 'Расписание':
         builder_schedule = [[InlineKeyboardButton(text='ПН', callback_data='monday0'),
                              InlineKeyboardButton(text="ВТ", callback_data='tuesday0'),
@@ -1021,7 +1261,8 @@ async def text_button(message: Message, state: FSMContext) -> Any:
                              InlineKeyboardButton(text='СБ', callback_data='saturday1')],
                             [InlineKeyboardButton(text='Сегодня', callback_data='today')]]
         schedule_markup = InlineKeyboardMarkup(inline_keyboard=builder_schedule)
-        await message.answer(f'На какой день нужно расписание?\nЧислитель (верх)\Знаменатель (низ)',
+        todayIs = _today() #Определение сегодняшнего дня недели
+        await message.answer(f'На какой день нужно расписание?\nЧислитель (верх)\Знаменатель (низ)\n{todayIs}',
                              reply_markup=schedule_markup)
     elif message.text == 'Новости':
         builder_schedule = [[InlineKeyboardButton(text='Старостат 5', callback_data='starostat05'),
@@ -1047,7 +1288,7 @@ async def text_button(message: Message, state: FSMContext) -> Any:
         await message.answer('За сколько вы хотите получать уведомления о предстоящих парах?\nВведите время в минутах: ', reply_markup=time_lesson_markup)
     elif message.text == 'test':
         await time_sleep_notifications(message)
-    elif message.text == '🌦 Запуск погоды':
+    elif message.text == 'Запуск погоды':
         await weather(message)
     elif message.text == '🛎 Запуск уведомлений':
         await time_sleep_notifications(message)
@@ -1063,15 +1304,11 @@ async def text_button(message: Message, state: FSMContext) -> Any:
     else:
         print('Бывает')
 
-
-
 def main() -> None:
     dp.include_router(form_router)
     bot = Bot(TOKEN, parse_mode="html")
     # And the run events dispatching
     dp.run_polling(bot)
-
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
