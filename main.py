@@ -718,8 +718,7 @@ async def weather(message: Message):
                     temp = w.temperature('celsius')['temp']
                     Wind = w.wind()
                     # Формула для определения эффективной температуры по госту 
-                    effective_temp = 13.12 + 0.6215 * temp - 11.37 * ((1.5 * Wind["speed"]) ** 0.16)
-                    + 0.3965 * temp * ((1.5 * Wind["speed"]) ** 0.16) 
+                    effective_temp = 13.12 + 0.6215 * temp - 11.37 * ((1.5 * Wind["speed"]) ** 0.16)+ 0.3965 * temp * ((1.5 * Wind["speed"]) ** 0.16) 
                     effective_temp=round(effective_temp, 1)
                     Feeling_weather = 'Ощущается как ' + str(effective_temp) + '°C'
                     try:
